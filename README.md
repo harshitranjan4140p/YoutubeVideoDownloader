@@ -39,5 +39,7 @@ It comes with a clean interface where you can:
 💡 Future Improvements
 
 Show all available resolutions dynamically instead of fixed options.
+
 Option to download subtitles.
+
 Dark mode UI.
