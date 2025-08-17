@@ -4,13 +4,18 @@ from tkinter import messagebox, filedialog, ttk
 from PIL import Image, ImageTk
 import requests
 from io import BytesIO
-import threading
 
+# Global flags and storage
 videoLoaded = False
-videoInfo = None  # to store info globally
+videoInfo = None  # Stores video info for later download
 
-# Progress hook for yt-dlp
+
+# ------------------ Progress Hook ------------------
 def progress_hook(d):
+    """
+    Called automatically by yt-dlp during download.
+    Updates the progress bar and status label in GUI.
+    """
     if d['status'] == 'downloading':
         total = d.get('total_bytes') or d.get('total_bytes_estimate')
         downloaded = d.get('downloaded_bytes', 0)
@@ -18,44 +23,54 @@ def progress_hook(d):
             percent_val = downloaded / total * 100
             progress_bar['value'] = percent_val
             status_label.config(text=f"Downloading... {percent_val:.1f}%")
-            root.update_idletasks()
+            root.update_idletasks()  # Refresh GUI
     elif d['status'] == 'finished':
         progress_bar['value'] = 100
         status_label.config(text="Download complete!")
 
 
-# Function to download video (runs in thread)
+# ------------------ Download Function ------------------
 def download_video():
+    """
+    Downloads the video to user-selected folder.
+    (This will block the GUI until download is finished since threading is removed.)
+    """
     global videoLoaded, videoInfo
     if not videoLoaded:
         messagebox.showwarning("Warning", "Video not loaded!!")
         return
     
+    # Ask user where to save the file
     save_path = filedialog.askdirectory(title="Select Download Folder")
     if not save_path:
         return
     
+    # yt-dlp options
     ydl_opts = {
-        "format": "best",
-        "outtmpl": f"{save_path}/%(title)s.%(ext)s",
-        "progress_hooks": [progress_hook],
+        "format": "best",  # best available quality
+        "outtmpl": f"{save_path}/%(title)s.%(ext)s",  # Save as Title.ext
+        "progress_hooks": [progress_hook],  # Attach hook for progress bar
         "noprogress": True
     }
 
-    def run_download():
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([videoInfo["webpage_url"]])
-            messagebox.showinfo("Success", f"Downloaded: {videoInfo.get('title', 'Unknown Title')}")
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-
-    # Reset progress bar before new download
+    # Reset progress bar
     progress_bar['value'] = 0
-    threading.Thread(target=run_download, daemon=True).start()
 
-# Loading Video Info
+    try:
+        # Start download (this blocks the GUI until finished)
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([videoInfo["webpage_url"]])
+        messagebox.showinfo("Success", f"Downloaded: {videoInfo.get('title', 'Unknown Title')}")
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+
+
+# ------------------ Load Video Info ------------------
 def load_Info():
+    """
+    Extracts video information (title, views, likes, thumbnail)
+    and updates the GUI with details.
+    """
     global videoLoaded, videoInfo
     url = url_entry.get()
     if not url:
@@ -63,6 +78,7 @@ def load_Info():
         return
     
     try:
+        # Extract video metadata
         ydl_opts = {"quiet": True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             videoInfo = ydl.extract_info(url, download=False)
@@ -71,16 +87,16 @@ def load_Info():
             likes = videoInfo.get("like_count", "N/A")
             thumb_url = videoInfo.get("thumbnail")
 
-        # Update GUI labels
+        # Update labels with metadata
         title_label.config(text=f"Title: {title}")
         views_label.config(text=f"Views: {views:,}")
         likes_label.config(text=f"Likes: {likes if likes != 'N/A' else 'Hidden'}")
 
-        # Load thumbnail
+        # Load thumbnail image
         if thumb_url:
             response = requests.get(thumb_url)
             img_data = Image.open(BytesIO(response.content))
-            img_data = img_data.resize((200, 120))
+            img_data = img_data.resize((200, 120))  # Resize to fit
             thumb_img = ImageTk.PhotoImage(img_data)
             thumbnail_label.config(image=thumb_img)
             thumbnail_label.image = thumb_img
@@ -91,12 +107,13 @@ def load_Info():
         messagebox.showerror("Error", str(e))
         videoLoaded = False
 
-# --- GUI Setup ---
+
+# ------------------ GUI Setup ------------------
 root = tk.Tk()
 root.title("YouTube Video Downloader")
 root.geometry("450x600")
 
-# URL Label + Entry
+# URL Entry
 tk.Label(root, text="YouTube URL:").pack(pady=5)
 url_entry = tk.Entry(root, width=50)
 url_entry.pack(pady=5)
@@ -129,4 +146,5 @@ progress_bar.pack(pady=10)
 # Download Button
 tk.Button(root, text="Download Video", command=download_video, bg="lightblue").pack(pady=15)
 
+# Start GUI loop
 root.mainloop()
